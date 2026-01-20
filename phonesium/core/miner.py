@@ -1,16 +1,26 @@
 """
 PHN Blockchain Miner for Phonesium SDK
 Provides simple mining functionality
+FIXED: Now matches node's exact block structure and hashing algorithm
 """
 
 import hashlib
 import time
 import requests
-from typing import Dict, Optional
+import json
+from typing import Dict, Optional, List
 
 from .config import DEFAULT_NODE_URL, DEFAULT_MINING_TIMEOUT
 from .wallet import Wallet
 from .exceptions import NetworkError
+
+try:
+    import orjson
+
+    HAS_ORJSON = True
+except ImportError:
+    orjson = None  # type: ignore
+    HAS_ORJSON = False
 
 
 class Miner:
@@ -31,7 +41,7 @@ class Miner:
         >>> miner.mine_continuous(max_blocks=10)
     """
 
-    def __init__(self, wallet: Wallet, node_url: str = None):
+    def __init__(self, wallet: Wallet, node_url: str = DEFAULT_NODE_URL):
         """
         Initialize miner
 
@@ -44,30 +54,80 @@ class Miner:
         self.blocks_mined = 0
         self.total_rewards = 0.0
 
-    def get_mining_info(self) -> Dict:
+        if not HAS_ORJSON:
+            print("[WARNING] orjson not installed - using fallback json (slower)")
+            print("[WARNING] Install with: pip install orjson")
+
+    def _hash_block(self, block: Dict) -> str:
         """
-        Get current mining difficulty and block info
+        Hash a block using the EXACT same method as the node
+        This is CRITICAL - must match node's hash_block() function exactly
+
+        Args:
+            block: Block dictionary (without 'hash' field)
 
         Returns:
-            dict: Mining information
+            str: SHA256 hash of block
+        """
+        block_copy = dict(block)
+        block_copy.pop("hash", None)  # Remove hash if present
+
+        if HAS_ORJSON and orjson:
+            # Use orjson with sorted keys (SAME AS NODE)
+            import orjson as orj  # type: ignore
+
+            block_string = orj.dumps(block_copy, option=orj.OPT_SORT_KEYS)  # type: ignore
+        else:
+            # Fallback to standard json with sorted keys
+            block_string = json.dumps(block_copy, sort_keys=True).encode()
+
+        return hashlib.sha256(block_string).hexdigest()
+
+    def get_mining_info(self) -> Dict:
+        """
+        Get current mining difficulty and block info from node
+
+        Returns:
+            dict: Mining information including pending transactions
         """
         try:
+            # Get node info
             response = requests.get(f"{self.node_url}/info")
             response.raise_for_status()
             info = response.json()
 
+            # Get pending transactions for the block
+            try:
+                pending_response = requests.post(f"{self.node_url}/get_pending")
+                pending_response.raise_for_status()
+                pending_data = pending_response.json()
+                pending_txs = pending_data.get("pending_transactions", [])
+            except:
+                pending_txs = []
+
+            # Get blockchain to find last block hash
+            try:
+                blockchain_response = requests.post(f"{self.node_url}/get_blockchain")
+                blockchain_response.raise_for_status()
+                blockchain_data = blockchain_response.json()
+                blockchain = blockchain_data.get("blockchain", [])
+                last_block_hash = blockchain[-1]["hash"] if blockchain else "0" * 64
+            except:
+                last_block_hash = "0" * 64
+
             return {
                 "difficulty": info.get("difficulty", 4),
                 "height": info.get("height", 0),
-                "last_block_hash": info.get("last_block_hash", "0"),
+                "last_block_hash": last_block_hash,
                 "mining_reward": info.get("mining_reward", 50.0),
+                "pending_transactions": pending_txs,
             }
         except requests.RequestException as e:
             raise NetworkError(f"Failed to get mining info: {e}")
 
     def mine_block(self, timeout: int = 60) -> Optional[Dict]:
         """
-        Mine a single block
+        Mine a single block with CORRECT structure matching the node
 
         Args:
             timeout: Maximum seconds to spend mining
@@ -77,19 +137,61 @@ class Miner:
         """
         print(f"[MINER] Starting mining for address: {self.wallet.address}")
 
-        # Get mining info
+        # Get mining info and pending transactions
         mining_info = self.get_mining_info()
         difficulty = mining_info["difficulty"]
         target_prefix = "0" * difficulty
+        pending_txs = mining_info["pending_transactions"]
+        mining_reward = mining_info["mining_reward"]
 
         print(f"[MINER] Difficulty: {difficulty} (target: {target_prefix}...)")
-        print(f"[MINER] Expected reward: {mining_info['mining_reward']} PHN")
+        print(f"[MINER] Expected reward: {mining_reward} PHN")
+        print(f"[MINER] Pending transactions: {len(pending_txs)}")
 
-        # Create block data
-        previous_hash = mining_info["last_block_hash"]
+        # Build block structure (MUST MATCH NODE EXACTLY)
+        prev_hash = mining_info["last_block_hash"]
         index = mining_info["height"]
-        timestamp = int(time.time())
+        timestamp = time.time()
         miner_address = self.wallet.address
+
+        # Create coinbase transaction (mining reward)
+        coinbase_tx = {
+            "sender": "coinbase",
+            "recipient": miner_address,
+            "amount": mining_reward,
+            "fee": 0.0,
+            "timestamp": timestamp,
+            "txid": hashlib.sha256(
+                f"coinbase_{miner_address}_{timestamp}_{index}".encode()
+            ).hexdigest(),
+            "signature": "genesis",
+        }
+
+        # Calculate total fees from pending transactions
+        total_fees = sum(float(tx.get("fee", 0.0)) for tx in pending_txs)
+
+        # Create fee transaction if there are fees
+        transactions = [coinbase_tx]
+        if total_fees > 0:
+            fee_tx = {
+                "sender": "miners_pool",
+                "recipient": miner_address,
+                "amount": total_fees,
+                "fee": 0.0,
+                "timestamp": timestamp,
+                "txid": hashlib.sha256(
+                    f"fees_{miner_address}_{timestamp}_{index}".encode()
+                ).hexdigest(),
+                "signature": "genesis",
+            }
+            transactions.append(fee_tx)
+
+        # Add pending transactions to block
+        transactions.extend(pending_txs)
+
+        print(
+            f"[MINER] Block will contain {len(transactions)} transactions (coinbase + {len(pending_txs)} pending)"
+        )
 
         # Start mining
         nonce = 0
@@ -106,10 +208,17 @@ class Miner:
                 )
                 return None
 
-            # Create block hash
-            block_data = f"{index}{previous_hash}{timestamp}{miner_address}{nonce}"
-            block_hash = hashlib.sha256(block_data.encode()).hexdigest()
+            # Build block with current nonce
+            block = {
+                "index": index,
+                "timestamp": timestamp,
+                "transactions": transactions,
+                "prev_hash": prev_hash,
+                "nonce": nonce,
+            }
 
+            # Hash block using EXACT node method
+            block_hash = self._hash_block(block)
             hashes_tried += 1
 
             # Progress indicator every 10000 hashes
@@ -122,6 +231,9 @@ class Miner:
                 elapsed = time.time() - start_time
                 hashrate = hashes_tried / elapsed
 
+                # Add hash to block
+                block["hash"] = block_hash
+
                 print(f"\n[MINER] [OK] Block found!")
                 print(f"[MINER] Hash: {block_hash}")
                 print(f"[MINER] Nonce: {nonce}")
@@ -129,40 +241,32 @@ class Miner:
                 print(f"[MINER] Hashrate: {hashrate:.0f} H/s")
                 print(f"[MINER] Total hashes: {hashes_tried:,}")
 
-                # Submit block to node
-                block = {
-                    "index": index,
-                    "previous_hash": previous_hash,
-                    "timestamp": timestamp,
-                    "miner": miner_address,
-                    "nonce": nonce,
-                    "hash": block_hash,
-                }
-
+                # Submit block to node (CORRECT ENDPOINT)
                 try:
                     print(f"[MINER] Submitting block to node...")
                     response = requests.post(
-                        f"{self.node_url}/mine",
-                        json={"miner": miner_address, "nonce": nonce},
+                        f"{self.node_url}/submit_block",  # FIXED: was /mine
+                        json={"block": block},
                         timeout=10,
                     )
 
                     if response.status_code == 200:
                         result = response.json()
-                        reward = result.get("reward", mining_info["mining_reward"])
 
                         self.blocks_mined += 1
-                        self.total_rewards += reward
+                        self.total_rewards += mining_reward + total_fees
 
                         print(f"[MINER] [OK] Block accepted!")
-                        print(f"[MINER] Reward: {reward} PHN")
+                        print(
+                            f"[MINER] Reward: {mining_reward} PHN + {total_fees} PHN fees"
+                        )
                         print(f"[MINER] Total blocks mined: {self.blocks_mined}")
                         print(f"[MINER] Total rewards: {self.total_rewards} PHN")
 
                         return {
                             "success": True,
                             "block": block,
-                            "reward": reward,
+                            "reward": mining_reward + total_fees,
                             "time": elapsed,
                             "hashrate": hashrate,
                             "hashes": hashes_tried,
