@@ -183,7 +183,7 @@ def test_blockchain_initialization(results):
     
     try:
         print_test("Importing blockchain module")
-        from app.core.blockchain import (
+        from app.core.blockchain.chain import (
             blockchain, init_database, load_blockchain, 
             create_genesis_block, verify_blockchain
         )
@@ -223,8 +223,8 @@ def test_node_sync_initialization(results):
     
     try:
         print_test("Importing node sync module")
-        from app.core.node_sync import RobustNodeSync, NodeHealth
-        from app.core.blockchain import blockchain, verify_blockchain, save_blockchain
+        from app.core.network.sync import RobustNodeSync, NodeHealth
+        from app.core.blockchain.chain import blockchain, verify_blockchain, save_blockchain
         
         print_test("Creating NodeHealth instance")
         health = NodeHealth()

@@ -5,7 +5,8 @@ import hashlib
 import shutil
 from filelock import FileLock
 from ecdsa import VerifyingKey, SECP256k1, BadSignatureError
-from app.core.config import settings, load_owner_address
+from app.core.config import settings
+from app.core.blockchain.chain import load_owner_address
 from app.utils.helpers import atomic_write, load_json, hash_block
 
 # In-memory state

@@ -316,10 +316,10 @@ def main():
     
     print("\n[CAPACITY ANALYSIS]")
     print(f"\nWith orjson optimization:")
-    print(f"  ✓ Can process {orjson_results_5000['tps']:.0f} transactions per second")
-    print(f"  ✓ Can handle {orjson_results_5000['tps']*60:.0f} transactions per minute")
-    print(f"  ✓ Can handle {orjson_results_5000['tps']*3600:.0f} transactions per hour")
-    print(f"  ✓ Can handle {orjson_results_5000['tps']*86400:.0f} transactions per day")
+    print(f"  [OK] Can process {orjson_results_5000['tps']:.0f} transactions per second")
+    print(f"  [OK] Can handle {orjson_results_5000['tps']*60:.0f} transactions per minute")
+    print(f"  [OK] Can handle {orjson_results_5000['tps']*3600:.0f} transactions per hour")
+    print(f"  [OK] Can handle {orjson_results_5000['tps']*86400:.0f} transactions per day")
     
     print("\n[BOTTLENECK ANALYSIS]")
     print(f"\nCurrent bottlenecks:")
@@ -333,11 +333,11 @@ def main():
     print("=" * 80)
     
     print(f"\nSUMMARY:")
-    print(f"  ✓ Average TPS improvement: {avg_improvement:.2f}x faster")
-    print(f"  ✓ Maximum TPS capacity: {orjson_results_5000['tps']:.0f} tx/s")
-    print(f"  ✓ Time saved per transaction: {json_results_1000['time_per_tx']-orjson_results_1000['time_per_tx']:.2f} ms")
-    print(f"  ✓ Annual time savings: {time_saved*365/3600:.2f} hours (10k tx/day)")
-    print(f"\nYour PHN Blockchain can now handle {(avg_improvement-1)*100:.0f}% MORE transactions! 🚀")
+    print(f"  [OK] Average TPS improvement: {avg_improvement:.2f}x faster")
+    print(f"  [OK] Maximum TPS capacity: {orjson_results_5000['tps']:.0f} tx/s")
+    print(f"  [OK] Time saved per transaction: {json_results_1000['time_per_tx']-orjson_results_1000['time_per_tx']:.2f} ms")
+    print(f"  [OK] Annual time savings: {time_saved*365/3600:.2f} hours (10k tx/day)")
+    print(f"\nYour PHN Blockchain can now handle {(avg_improvement-1)*100:.0f}% MORE transactions! ")
     
     # Save results
     results = {
@@ -367,7 +367,7 @@ def main():
     with open("TPS_RESULTS.json", "w") as f:
         json.dump(results, f, indent=2)
     
-    print(f"\n✓ Results saved to TPS_RESULTS.json")
+    print(f"\n[OK] Results saved to TPS_RESULTS.json")
 
 if __name__ == "__main__":
     main()

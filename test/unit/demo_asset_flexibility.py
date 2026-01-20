@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from app.core.assets import Asset, AssetType, AssetRegistry, AssetStandard
+from app.core.assets.tokenization import Asset, AssetType, AssetRegistry, AssetStandard
 from phonesium import Wallet
 
 

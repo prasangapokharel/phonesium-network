@@ -1,6 +1,6 @@
 # peers.py - API endpoints for Phonesium blockchain
 from aiohttp import web
-from app.core.blockchain import peers, sync_with_peer
+from app.core.blockchain.chain import peers, sync_with_peer
 from app.settings import settings
 
 routes = web.RouteTableDef()

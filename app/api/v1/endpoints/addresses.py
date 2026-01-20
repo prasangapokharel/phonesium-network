@@ -1,6 +1,6 @@
 # addresses.py - API endpoints for Phonesium blockchain
 from aiohttp import web
-from app.core.blockchain import register_address, resolve_display
+from app.api.v1.endpoints.blockchain import register_address, resolve_display
 
 routes = web.RouteTableDef()
 

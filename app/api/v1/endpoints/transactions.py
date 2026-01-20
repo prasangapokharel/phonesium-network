@@ -5,7 +5,7 @@ Send transactions, query history, broadcast signed transactions
 
 from aiohttp import web
 import time
-from app.core.blockchain import blockchain, pending_txs, get_balance, validate_transaction, public_key_to_address
+from app.core.blockchain.chain import blockchain, pending_txs, get_balance, validate_transaction, public_key_to_address
 
 routes = web.RouteTableDef()
 

@@ -38,13 +38,14 @@ comm2 = MinerCommunicator(wallet2)
 
 # Connect both
 print("\n[2] Connecting to tunnel server...")
-if not comm1.connect():
-    print("ERROR: Comm1 failed to connect")
-    sys.exit(1)
-
-if not comm2.connect():
-    print("ERROR: Comm2 failed to connect")
-    sys.exit(1)
+try:
+    if not comm1.connect():
+        print("ERROR: Comm1 failed to connect")
+        raise Exception("Comm1 connection failed")
+    
+    if not comm2.connect():
+        print("ERROR: Comm2 failed to connect")
+        raise Exception("Comm2 connection failed")
 
 print("    [OK] Both connected")
 

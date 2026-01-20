@@ -11,8 +11,8 @@ def test_imports():
     import ecdsa
     import aiohttp
     import requests
-    from app.core.blockchain import blockchain, init_database
-    from app.core.node_sync import RobustNodeSync
+    from app.core.blockchain.chain import blockchain, init_database
+    from app.core.network.sync import RobustNodeSync
     print("[OK] All imports successful")
 
 def test_orjson_speed():
@@ -42,7 +42,7 @@ def test_orjson_speed():
 def test_lmdb():
     """Test LMDB"""
     print("\nTesting LMDB...")
-    from app.core.blockchain import init_database, blockchain, load_blockchain
+    from app.core.blockchain.chain import init_database, blockchain, load_blockchain
     
     init_database()
     load_blockchain()
@@ -51,8 +51,8 @@ def test_lmdb():
 def test_node_sync():
     """Test node sync"""
     print("\nTesting node sync...")
-    from app.core.node_sync import RobustNodeSync, NodeHealth
-    from app.core.blockchain import blockchain, verify_blockchain, save_blockchain
+    from app.core.network.sync import RobustNodeSync, NodeHealth
+    from app.core.blockchain.chain import blockchain, verify_blockchain, save_blockchain
     
     health = NodeHealth()
     peers = set(["http://localhost:8546"])

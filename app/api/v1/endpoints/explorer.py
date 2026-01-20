@@ -5,8 +5,8 @@ Query blocks, search blockchain, network statistics
 
 from aiohttp import web
 import time
-from app.core.blockchain import blockchain, pending_txs, get_balance, calculate_total_mined, get_current_block_reward
-from app.core.difficulty_adjuster import DifficultyAdjuster
+from app.core.blockchain.chain import blockchain, pending_txs, get_balance, calculate_total_mined, get_current_block_reward
+from app.core.consensus.difficulty import DifficultyAdjuster
 from app.core.config import settings
 
 routes = web.RouteTableDef()

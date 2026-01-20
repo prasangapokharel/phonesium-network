@@ -21,10 +21,10 @@ def run_command(cmd, description):
             result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
         else:
             result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True, executable='/bin/bash')
-        print(f"[✓] {description} - SUCCESS")
+        print(f"[[OK]] {description} - SUCCESS")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"[✗] {description} - FAILED")
+        print(f"[[FAIL]] {description} - FAILED")
         print(f"    Error: {e.stderr}")
         return False
 
@@ -41,7 +41,7 @@ def main():
     
     # Check Python version
     if sys.version_info < (3, 8):
-        print("[✗] Python 3.8 or higher required!")
+        print("[[FAIL]] Python 3.8 or higher required!")
         sys.exit(1)
     
     print_header("Step 1: Create Virtual Environment")
@@ -80,15 +80,15 @@ def main():
     lmdb_dir = os.path.join(project_root, "lmdb_data")
     if not os.path.exists(lmdb_dir):
         os.makedirs(lmdb_dir)
-        print("[✓] Created LMDB data directory")
+        print("[[OK]] Created LMDB data directory")
     else:
         print("[i] LMDB data directory already exists")
     
     print_header("Setup Complete!")
     
-    print("✅ Virtual environment created")
-    print("✅ Dependencies installed")
-    print("✅ Database initialized")
+    print("[OK] Virtual environment created")
+    print("[OK] Dependencies installed")
+    print("[OK] Database initialized")
     print("\n" + "="*60)
     print("  HOW TO RUN:")
     print("="*60 + "\n")
@@ -120,5 +120,5 @@ if __name__ == "__main__":
         print("\n[!] Setup interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"\n[✗] Setup failed: {e}")
+        print(f"\n[[FAIL]] Setup failed: {e}")
         sys.exit(1)

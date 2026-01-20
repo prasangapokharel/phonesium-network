@@ -3,7 +3,7 @@ import orjson
 import os
 import sqlite3
 from datetime import datetime
-from app.core.transactions import generate_keypair
+from app.core.transactions.base import generate_keypair
 from app.core.config import settings
 
 def init_wallet_db():

@@ -7,7 +7,7 @@ from app.utils.wallet_generator import (
     get_wallet_by_address, get_wallet_by_number,
     list_all_wallets, get_wallet_count
 )
-from app.core.blockchain import get_balance
+from app.core.blockchain.chain import get_balance
 
 router = APIRouter()
 

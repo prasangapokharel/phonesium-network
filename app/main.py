@@ -14,7 +14,7 @@ from functools import wraps
 load_dotenv()
 
 # Import blockchain core logic and config
-from app.core.blockchain import (
+from app.core.blockchain.chain import (
     blockchain, pending_txs, peers,
     load_blockchain, save_blockchain, create_genesis_block,
     validate_transaction, validate_block, get_balance,
@@ -23,10 +23,10 @@ from app.core.blockchain import (
     public_key_to_address
 )
 from app.core.config import settings
-from app.core.difficulty_adjuster import DifficultyAdjuster
-from app.core.mempool import AdvancedMempool
-from app.core.chain_protection import ChainProtection
-from app.core.node_sync import RobustNodeSync
+from app.core.consensus.difficulty import DifficultyAdjuster
+from app.core.transactions.mempool import AdvancedMempool
+from app.core.security.protection import ChainProtection
+from app.core.network.sync import RobustNodeSync
 
 # Constants and paths
 ROOT = Path(__file__).resolve().parent

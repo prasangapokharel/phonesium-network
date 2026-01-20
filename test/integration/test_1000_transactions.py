@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from ecdsa import SigningKey, SECP256k1
-from app.core.transactions import create_transaction, sign_tx, make_txid
+from app.core.transactions.base import create_transaction, sign_tx, make_txid
 from app.core.config import settings
 
 NODE_URL = "http://localhost:8765"

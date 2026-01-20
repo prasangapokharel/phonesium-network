@@ -9,7 +9,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.blockchain import get_current_block_reward, blockchain
+from app.core.blockchain.chain import get_current_block_reward, blockchain
 from app.settings import settings
 
 print("="*70)
@@ -107,7 +107,7 @@ print("Checking fee distribution in validation logic...")
 
 # Read the validation code
 import inspect
-from app.core.blockchain import validate_block
+from app.core.blockchain.chain import validate_block
 
 source = inspect.getsource(validate_block)
 
@@ -125,10 +125,10 @@ else:
     print("[OK] Code does not send fees to owner")
 
 print("\nFee Distribution Rules:")
-print("  ✓ Transaction fees collected from all transactions in block")
-print("  ✓ Fees sent via 'miners_pool' transaction")
-print("  ✓ Recipient: Miner who mined the block (from coinbase)")
-print("  ✓ NOT sent to network owner")
+print("  [OK] Transaction fees collected from all transactions in block")
+print("  [OK] Fees sent via 'miners_pool' transaction")
+print("  [OK] Recipient: Miner who mined the block (from coinbase)")
+print("  [OK] NOT sent to network owner")
 
 # Test 5: Mining Incentive Calculation
 print("\n[TEST 5] Mining Incentive Analysis")

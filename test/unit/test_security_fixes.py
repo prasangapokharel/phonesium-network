@@ -12,10 +12,10 @@ import random
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.transactions import make_txid, validate_transaction, verify_tx_signature
-from app.core.blockchain import blockchain, create_genesis_block
-from app.core.difficulty_adjuster import DifficultyAdjuster
-from app.core.mempool import AdvancedMempool
+from app.core.transactions.base import make_txid, validate_transaction, verify_tx_signature
+from app.core.blockchain.chain import blockchain, create_genesis_block
+from app.core.consensus.difficulty import DifficultyAdjuster
+from app.core.transactions.mempool import AdvancedMempool
 
 def test_txid_collision_prevention():
     """Test that nonce prevents TXID collisions"""
@@ -50,15 +50,17 @@ def test_replay_attack_protection():
         "fee": 0.01,
         "timestamp": current_time + 3600,  # 1 hour in future
         "txid": "a" * 64,
-        "signature": "test_sig"
+        "signature": "test_sig",
+        "nonce": 123456
     }
     
     ok, msg = validate_transaction(future_tx)
+    print(f"  [DEBUG] Valid: {ok}, Message: '{msg}'")
     if not ok and "future" in msg.lower():
         print("[PASS] Future transactions rejected")
         print(f"  Message: {msg}")
     else:
-        print("[FAIL] Future transaction not rejected")
+        print(f"[FAIL] Future transaction not rejected (ok={ok}, has_future={('future' in msg.lower())})")
         return False
     
     # Test 2: Old transaction (should fail)
@@ -69,7 +71,8 @@ def test_replay_attack_protection():
         "fee": 0.01,
         "timestamp": current_time - 7200,  # 2 hours old
         "txid": "b" * 64,
-        "signature": "test_sig"
+        "signature": "test_sig",
+        "nonce": 123457
     }
     
     ok, msg = validate_transaction(old_tx)
@@ -94,7 +97,8 @@ def test_signature_validation():
         "fee": 0.0,
         "timestamp": time.time(),
         "txid": "c" * 64,
-        "signature": "genesis"
+        "signature": "genesis",
+        "nonce": 1
     }
     
     if verify_tx_signature(system_tx):
@@ -111,7 +115,8 @@ def test_signature_validation():
         "fee": 0.01,
         "timestamp": time.time(),
         "txid": "d" * 64,
-        "signature": "genesis"  # Trying to bypass signature check
+        "signature": "genesis",  # Trying to bypass signature check
+        "nonce": 2
     }
     
     if not verify_tx_signature(user_tx_fake):
@@ -163,9 +168,9 @@ def test_mempool_priority():
     
     # Add transactions with different fees
     txs = [
-        {"txid": "tx1", "sender": "A", "recipient": "B", "amount": 10, "fee": 0.01, "timestamp": time.time(), "signature": "sig1"},
-        {"txid": "tx2", "sender": "C", "recipient": "D", "amount": 20, "fee": 0.10, "timestamp": time.time(), "signature": "sig2"},
-        {"txid": "tx3", "sender": "E", "recipient": "F", "amount": 30, "fee": 0.05, "timestamp": time.time(), "signature": "sig3"},
+        {"txid": "tx1", "sender": "A", "recipient": "B", "amount": 10, "fee": 0.01, "timestamp": time.time(), "signature": "sig1", "nonce": 1},
+        {"txid": "tx2", "sender": "C", "recipient": "D", "amount": 20, "fee": 0.10, "timestamp": time.time(), "signature": "sig2", "nonce": 2},
+        {"txid": "tx3", "sender": "E", "recipient": "F", "amount": 30, "fee": 0.05, "timestamp": time.time(), "signature": "sig3", "nonce": 3},
     ]
     
     for tx in txs:
@@ -202,7 +207,8 @@ def test_mempool_eviction():
             "amount": 10,
             "fee": 0.01,
             "timestamp": time.time(),
-            "signature": "sig"
+            "signature": "sig",
+            "nonce": i
         }
         mempool.add_transaction(tx)
     
@@ -214,7 +220,8 @@ def test_mempool_eviction():
         "amount": 10,
         "fee": 1.0,
         "timestamp": time.time(),
-        "signature": "sig"
+        "signature": "sig",
+        "nonce": 999
     }
     
     success, msg = mempool.add_transaction(high_fee_tx)

@@ -8,7 +8,7 @@ import time
 import hashlib
 import secrets
 from typing import Dict
-from app.core.blockchain import get_balance
+from app.core.blockchain.chain import get_balance
 
 routes = web.RouteTableDef()
 

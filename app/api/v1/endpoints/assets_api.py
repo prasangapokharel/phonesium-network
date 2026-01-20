@@ -5,8 +5,8 @@ Create, transfer, and query tokenized assets
 
 from aiohttp import web
 import time
-from app.core.assets import Asset, AssetType, AssetStandard
-from app.core.blockchain import blockchain, get_balance
+from app.core.assets.tokenization import Asset, AssetType, AssetStandard
+from app.core.blockchain.chain import blockchain, get_balance
 
 routes = web.RouteTableDef()
 

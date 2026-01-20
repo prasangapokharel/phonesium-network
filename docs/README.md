@@ -60,6 +60,7 @@ Location: `docs/api/`
 
 ### User Guides
 Location: `docs/guides/`
+- TPS_TESTING_GUIDE.md - How to test TPS ⭐ NEW
 - ENCRYPTION.md - Encryption and security
 - TUNNEL_TRANSFER.md - Secure file transfers
 - GOSSIP_AND_ECONOMICS.md - Economic model
@@ -69,7 +70,10 @@ Location: `docs/guides/`
 ### Test Reports
 Location: `docs/reports/`
 - FINAL_RESULTS.txt - All test results
-- TPS_RESULTS.txt - TPS capacity analysis
+- TPS_RESULTS.txt - TPS capacity analysis (1,337 TPS)
+- TPS_TEST_RESULTS.md - Latest TPS test results ⭐ NEW
+- TPS_SUMMARY.md - TPS summary and analysis ⭐ NEW
+- DEVELOPMENT_PROGRESS.md - Development session report ⭐ NEW
 - BENCHMARK_RESULTS.md - Performance data
 - BENCHMARK_SUMMARY.txt - Quick summary
 

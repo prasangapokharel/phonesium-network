@@ -21,7 +21,7 @@ if sys.platform == "win32":
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.tunnel_transfer import TunnelTransferServer, TunnelTransferClient, SecureMessageHandler
+from app.core.extensions.tunnel import TunnelTransferServer, TunnelTransferClient, SecureMessageHandler
 from ecdsa import SigningKey, SECP256k1
 
 
@@ -39,7 +39,7 @@ def test_secure_message_handler():
     recipient_public = recipient_private.get_verifying_key().to_string().hex()
     
     # Test message
-    original_message = "Hello, this is a secret message! 🔒"
+    original_message = "Hello, this is a secret message! "
     print(f"\n[Original Message] {original_message}")
     
     # Encrypt
@@ -71,10 +71,10 @@ def test_secure_message_handler():
     
     # Verify
     if decrypted_message == original_message:
-        print("✓ TEST PASSED: Message encrypted and decrypted successfully")
+        print("[OK] TEST PASSED: Message encrypted and decrypted successfully")
         return True
     else:
-        print("✗ TEST FAILED: Decrypted message doesn't match original")
+        print("[FAIL] TEST FAILED: Decrypted message doesn't match original")
         return False
 
 
@@ -96,7 +96,7 @@ def test_encrypted_tunnel_transfer():
     wallets = list(wallet_dir.glob("*.json"))
     
     if len(wallets) < 2:
-        print("✗ TEST SKIPPED: Need at least 2 wallets in user/wallets/")
+        print("[FAIL] TEST SKIPPED: Need at least 2 wallets in user/wallets/")
         server.stop()
         return False
     
@@ -144,12 +144,12 @@ def test_encrypted_tunnel_transfer():
     # Register both clients
     print("\n[Registering] Clients with tunnel server...")
     if not client1.register():
-        print("✗ TEST FAILED: Client 1 registration failed")
+        print("[FAIL] TEST FAILED: Client 1 registration failed")
         server.stop()
         return False
     
     if not client2.register():
-        print("✗ TEST FAILED: Client 2 registration failed")
+        print("[FAIL] TEST FAILED: Client 2 registration failed")
         server.stop()
         return False
     
@@ -157,7 +157,7 @@ def test_encrypted_tunnel_transfer():
     
     # Send encrypted message from client1 to client2
     print("\n[Sending] Encrypted message from Miner 1 to Miner 2...")
-    test_message = "This is an encrypted test message! 🔐"
+    test_message = "This is an encrypted test message! "
     
     # Start listening on client2
     messages_received = []
@@ -207,7 +207,7 @@ def test_encrypted_tunnel_transfer():
     result = client1.send_message(address2, test_message)
     
     if not result:
-        print("✗ TEST FAILED: Message send failed")
+        print("[FAIL] TEST FAILED: Message send failed")
         server.stop()
         return False
     
@@ -216,13 +216,13 @@ def test_encrypted_tunnel_transfer():
     
     # Check if message was received and decrypted
     if len(messages_received) > 0 and messages_received[0] == test_message:
-        print(f"\n✓ TEST PASSED: Encrypted message sent and decrypted successfully")
+        print(f"\n[OK] TEST PASSED: Encrypted message sent and decrypted successfully")
         print(f"  Original: {test_message}")
         print(f"  Received: {messages_received[0]}")
         server.stop()
         return True
     else:
-        print(f"\n✗ TEST FAILED: Message not received or decryption failed")
+        print(f"\n[FAIL] TEST FAILED: Message not received or decryption failed")
         print(f"  Expected: {test_message}")
         print(f"  Received: {messages_received}")
         server.stop()
@@ -241,7 +241,7 @@ def main():
     try:
         results.append(("SecureMessageHandler", test_secure_message_handler()))
     except Exception as e:
-        print(f"\n✗ TEST FAILED: {e}")
+        print(f"\n[FAIL] TEST FAILED: {e}")
         import traceback
         traceback.print_exc()
         results.append(("SecureMessageHandler", False))
@@ -250,7 +250,7 @@ def main():
     try:
         results.append(("Encrypted Tunnel Transfer", test_encrypted_tunnel_transfer()))
     except Exception as e:
-        print(f"\n✗ TEST FAILED: {e}")
+        print(f"\n[FAIL] TEST FAILED: {e}")
         import traceback
         traceback.print_exc()
         results.append(("Encrypted Tunnel Transfer", False))
@@ -261,7 +261,7 @@ def main():
     print("=" * 70)
     
     for name, passed in results:
-        status = "✓ PASS" if passed else "✗ FAIL"
+        status = "[OK] PASS" if passed else "[FAIL] FAIL"
         print(f"{status} - {name}")
     
     total = len(results)

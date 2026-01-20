@@ -5,7 +5,7 @@ Query PHN balances, assets, and token holdings
 
 from aiohttp import web
 import time
-from app.core.blockchain import blockchain, get_balance, pending_txs
+from app.core.blockchain.chain import blockchain, get_balance, pending_txs
 
 routes = web.RouteTableDef()
 

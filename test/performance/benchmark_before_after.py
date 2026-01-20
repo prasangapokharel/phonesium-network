@@ -309,11 +309,11 @@ def main():
     print("\n" + "=" * 70)
     print("BENCHMARK COMPLETE!")
     print("=" * 70)
-    print("\n✅ orjson is significantly faster than standard json")
-    print(f"✅ Average {avg_speedup:.2f}x performance improvement")
-    print("✅ All 31 files successfully converted")
-    print("✅ System is production-ready!")
-    print("\nYour PHN Blockchain is now optimized for maximum performance! 🚀")
+    print("\n[OK] orjson is significantly faster than standard json")
+    print(f"[OK] Average {avg_speedup:.2f}x performance improvement")
+    print("[OK] All 31 files successfully converted")
+    print("[OK] System is production-ready!")
+    print("\nYour PHN Blockchain is now optimized for maximum performance! ")
 
 if __name__ == "__main__":
     main()

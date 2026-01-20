@@ -132,7 +132,7 @@ def test_basic_sync():
             length = node.get_chain_length()
             print(f"  {node.name}: {length} blocks")
         
-        print("\n[TEST] ✓ Basic sync test passed!")
+        print("\n[TEST] [OK] Basic sync test passed!")
         
     finally:
         # Stop all nodes
@@ -178,9 +178,9 @@ def test_node_failure():
         print(f"\n[TEST] Checking remaining nodes:")
         for node in nodes[1:]:
             if node.is_running():
-                print(f"  {node.name}: Running ✓")
+                print(f"  {node.name}: Running [OK]")
             else:
-                print(f"  {node.name}: FAILED ✗")
+                print(f"  {node.name}: FAILED [FAIL]")
                 raise Exception(f"{node.name} should still be running!")
         
         # Wait for continued sync
@@ -192,12 +192,12 @@ def test_node_failure():
         for node in nodes[1:]:
             if node.is_running():
                 length = node.get_chain_length()
-                print(f"  {node.name}: {length} blocks ✓")
+                print(f"  {node.name}: {length} blocks [OK]")
             else:
                 print(f"  {node.name}: OFFLINE")
         
-        print("\n[TEST] ✓ Node failure test passed!")
-        print("[TEST] ✓ Nodes 2 & 3 continued syncing after Node 1 failure!")
+        print("\n[TEST] [OK] Node failure test passed!")
+        print("[TEST] [OK] Nodes 2 & 3 continued syncing after Node 1 failure!")
         
     finally:
         # Stop all nodes
@@ -256,16 +256,16 @@ def test_peer_recovery():
         for node in nodes:
             if node.is_running():
                 length = node.get_chain_length()
-                print(f"  {node.name}: {length} blocks ✓")
+                print(f"  {node.name}: {length} blocks [OK]")
             else:
-                print(f"  {node.name}: FAILED ✗")
+                print(f"  {node.name}: FAILED [FAIL]")
                 all_running = False
         
         if all_running:
-            print("\n[TEST] ✓ Peer recovery test passed!")
-            print("[TEST] ✓ Node 1 successfully recovered and re-synced!")
+            print("\n[TEST] [OK] Peer recovery test passed!")
+            print("[TEST] [OK] Node 1 successfully recovered and re-synced!")
         else:
-            print("\n[TEST] ✗ Test failed - not all nodes running")
+            print("\n[TEST] [FAIL] Test failed - not all nodes running")
         
     finally:
         # Stop all nodes
@@ -303,9 +303,9 @@ def main():
         print("\n" + "="*60)
         print("ALL TESTS COMPLETED!")
         print("="*60)
-        print("\n✓ Basic sync: PASSED")
-        print("✓ Node failure: PASSED")
-        print("✓ Peer recovery: PASSED")
+        print("\n[OK] Basic sync: PASSED")
+        print("[OK] Node failure: PASSED")
+        print("[OK] Peer recovery: PASSED")
         print("\nYour PHN blockchain has robust node synchronization!")
         
     except KeyboardInterrupt:

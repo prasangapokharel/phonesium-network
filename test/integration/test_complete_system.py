@@ -7,13 +7,13 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import time
-from app.core.blockchain import (
+from app.core.blockchain.chain import (
     init_database, load_blockchain, blockchain, 
     load_owner_address, get_balance, pending_txs,
     validate_transaction_pouv, save_blockchain,
     create_genesis_block, hash_block
 )
-from app.core.transactions import generate_keypair, create_transaction
+from app.core.transactions.base import generate_keypair, create_transaction
 
 print("="*70)
 print("PHN BLOCKCHAIN - COMPLETE SYSTEM TEST")
@@ -24,7 +24,7 @@ print("\n[TEST 1] LMDB Database Initialization")
 print("-" * 70)
 try:
     init_database()
-    from app.core.lmdb_storage import get_lmdb
+    from app.core.storage.lmdb import get_lmdb
     db = get_lmdb()
     print("[OK] LMDB initialized successfully")
     print(f"     Database path: {db.db_path}")
@@ -104,7 +104,7 @@ except Exception as e:
 print("\n[TEST 5] Valid Transaction Creation")
 print("-" * 70)
 try:
-    from app.core.blockchain import load_owner_private_key, load_owner_public_key
+    from app.core.blockchain.chain import load_owner_private_key, load_owner_public_key
     
     # Create recipient wallet
     recv_priv, recv_pub, recv_addr = generate_keypair()
@@ -142,7 +142,7 @@ except Exception as e:
 print("\n[TEST 6] Block Creation & Mining")
 print("-" * 70)
 try:
-    from app.core.blockchain import get_current_block_reward
+    from app.core.blockchain.chain import get_current_block_reward
     
     # Create coinbase transaction
     reward = get_current_block_reward()
@@ -200,7 +200,7 @@ try:
         print("[WARN] Could not mine block in 1M attempts")
     
     # Validate and add block
-    from app.core.blockchain import validate_block
+    from app.core.blockchain.chain import validate_block
     valid, msg = validate_block(new_block)
     if valid:
         blockchain.append(new_block)

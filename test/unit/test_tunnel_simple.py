@@ -10,7 +10,7 @@ import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.tunnel_transfer import TunnelTransferClient
+from app.core.extensions.tunnel import TunnelTransferClient
 
 # Test miner addresses
 MINER_A = "PHN718b7ad6d46933825778e5c95757e12b853e3d0c"
