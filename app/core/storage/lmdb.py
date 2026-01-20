@@ -8,6 +8,7 @@ import os
 import orjson
 import time
 import lmdb
+import logging
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 
@@ -15,20 +16,30 @@ PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
+# Setup logging
+logger = logging.getLogger(__name__)
+
 
 class LMDBStorage:
-    def __init__(self, db_dir: str = "lmdb_data"):
-        """Initialize LMDB connection"""
+    def __init__(self, db_dir: str = "lmdb_data", initial_map_size_mb: int = 1024):
+        """
+        Initialize LMDB connection with auto-resize capability
+
+        Args:
+            db_dir: Directory for LMDB files
+            initial_map_size_mb: Initial database size in MB (default 1GB for production)
+        """
         self.db_path = os.path.join(PROJECT_ROOT, db_dir)
         os.makedirs(self.db_path, exist_ok=True)
 
+        # Store map size for resize operations
+        self.current_map_size = initial_map_size_mb * 1024 * 1024
+        self.max_map_size = 10 * 1024 * 1024 * 1024  # 10GB max
+
         # Open LMDB environment with multiple named databases
-        # map_size: Maximum size database may grow to
-        # FIXED: Reduced from 10GB to 100MB for development (prevents huge file allocation)
-        # Production: Can increase if needed, but 100MB handles ~10,000 blocks efficiently
         self.env = lmdb.open(
             self.db_path,
-            map_size=100 * 1024 * 1024,  # 100MB (was 10GB - FIX for large DB issue)
+            map_size=self.current_map_size,  # Start with 1GB (configurable)
             max_dbs=10,  # Support multiple named databases
             writemap=True,
             map_async=True,
@@ -42,23 +53,56 @@ class LMDBStorage:
             self.peers_db = self.env.open_db(b"peers", txn=txn)
             self.metadata_db = self.env.open_db(b"metadata", txn=txn)
             self.validation_db = self.env.open_db(b"validation", txn=txn)
+            self.balance_cache_db = self.env.open_db(b"balance_cache", txn=txn)
 
-        print(f"[LMDB] Initialized at {self.db_path}")
-        print(f"[LMDB] Database: Lightning Memory-Mapped Database (LMDB)")
-        print(f"[LMDB] Advantages: Very fast, no C++ compiler needed, pure Python")
+        logger.info(f"LMDB initialized at {self.db_path}")
+        logger.info(
+            f"Initial map size: {initial_map_size_mb}MB, Max size: {self.max_map_size / (1024 * 1024 * 1024):.1f}GB"
+        )
+
+    def _check_and_resize(self):
+        """
+        Check database usage and resize if necessary
+        Auto-resize when 80% full
+        """
+        try:
+            stat = self.env.stat()
+            info = self.env.info()
+
+            # Calculate usage percentage
+            used_size = stat["psize"] * info["last_pgno"]
+            usage_percent = (used_size / self.current_map_size) * 100
+
+            # If over 80% full, double the size
+            if usage_percent > 80:
+                new_size = min(self.current_map_size * 2, self.max_map_size)
+                if new_size > self.current_map_size:
+                    logger.warning(
+                        f"Database {usage_percent:.1f}% full, resizing to {new_size / (1024 * 1024):.0f}MB"
+                    )
+                    self.env.set_mapsize(new_size)
+                    self.current_map_size = new_size
+                    logger.info(f"Database resized successfully")
+                else:
+                    logger.error(f"Database at max size, cannot resize further")
+        except Exception as e:
+            logger.error(f"Error checking database size: {e}")
 
     def close(self):
         """Close LMDB connection"""
         if self.env:
             self.env.sync()
             self.env.close()
-            print("[LMDB] Database closed")
+            logger.info("LMDB database closed")
 
     # ========== BLOCKCHAIN OPERATIONS ==========
 
     def save_blockchain(self, blockchain: List[Dict]) -> bool:
         """Save entire blockchain to LMDB"""
         try:
+            # Check and resize if necessary before saving
+            self._check_and_resize()
+
             with self.env.begin(write=True) as txn:
                 # Clear existing blocks
                 with txn.cursor(db=self.blocks_db) as cursor:
@@ -77,11 +121,11 @@ class LMDBStorage:
                 metadata = {"block_count": len(blockchain), "last_updated": time.time()}
                 txn.put(b"blockchain_meta", orjson.dumps(metadata), db=self.metadata_db)
 
-            print(f"[LMDB] Saved {len(blockchain)} blocks")
+            logger.info(f"Saved {len(blockchain)} blocks to LMDB")
             return True
 
         except Exception as e:
-            print(f"[LMDB] Error saving blockchain: {e}")
+            logger.error(f"Error saving blockchain: {e}")
             return False
 
     def load_blockchain(self) -> Optional[List[Dict]]:
@@ -102,11 +146,11 @@ class LMDBStorage:
             # Sort by index to ensure correct order
             blocks.sort(key=lambda b: b.get("index", 0))
 
-            print(f"[LMDB] Loaded {len(blocks)} blocks")
+            logger.info(f"Loaded {len(blocks)} blocks")
             return blocks
 
         except Exception as e:
-            print(f"[LMDB] Error loading blockchain: {e}")
+            logger.info(f"Error loading blockchain: {e}")
             return None
 
     def get_block_by_index(self, index: int) -> Optional[Dict]:
@@ -122,7 +166,7 @@ class LMDBStorage:
             return None
 
         except Exception as e:
-            print(f"[LMDB] Error getting block {index}: {e}")
+            logger.info(f"Error getting block {index}: {e}")
             return None
 
     def get_block_count(self) -> int:
@@ -164,7 +208,7 @@ class LMDBStorage:
             return True
 
         except Exception as e:
-            print(f"[LMDB] Error appending block: {e}")
+            logger.info(f"Error appending block: {e}")
             return False
 
     # ========== PENDING TRANSACTIONS ==========
@@ -185,11 +229,11 @@ class LMDBStorage:
                     value = orjson.dumps(tx)
                     txn.put(key, value, db=self.pending_db)
 
-            print(f"[LMDB] Saved {len(pending_txs)} pending transactions")
+            logger.info(f"Saved {len(pending_txs)} pending transactions")
             return True
 
         except Exception as e:
-            print(f"[LMDB] Error saving pending transactions: {e}")
+            logger.info(f"Error saving pending transactions: {e}")
             return False
 
     def load_pending_transactions(self) -> List[Dict]:
@@ -203,11 +247,11 @@ class LMDBStorage:
                         tx = orjson.loads(value)
                         pending_txs.append(tx)
 
-            print(f"[LMDB] Loaded {len(pending_txs)} pending transactions")
+            logger.info(f"Loaded {len(pending_txs)} pending transactions")
             return pending_txs
 
         except Exception as e:
-            print(f"[LMDB] Error loading pending transactions: {e}")
+            logger.info(f"Error loading pending transactions: {e}")
             return []
 
     # ========== PEERS ==========
@@ -228,11 +272,11 @@ class LMDBStorage:
                     value = peer.encode()
                     txn.put(key, value, db=self.peers_db)
 
-            print(f"[LMDB] Saved {len(peers)} peers")
+            logger.info(f"Saved {len(peers)} peers")
             return True
 
         except Exception as e:
-            print(f"[LMDB] Error saving peers: {e}")
+            logger.info(f"Error saving peers: {e}")
             return False
 
     def load_peers(self) -> set:
@@ -246,11 +290,11 @@ class LMDBStorage:
                         peer = value.decode()
                         peers.add(peer)
 
-            print(f"[LMDB] Loaded {len(peers)} peers")
+            logger.info(f"Loaded {len(peers)} peers")
             return peers
 
         except Exception as e:
-            print(f"[LMDB] Error loading peers: {e}")
+            logger.info(f"Error loading peers: {e}")
             return set()
 
     # ========== PROOF OF UNIVERSAL VALIDATION (POUV) ==========
@@ -264,7 +308,7 @@ class LMDBStorage:
                 txn.put(key, value, db=self.validation_db)
             return True
         except Exception as e:
-            print(f"[LMDB] Error saving validation record: {e}")
+            logger.info(f"Error saving validation record: {e}")
             return False
 
     def save_validation_records_batch(self, records: List[Tuple[str, Dict]]) -> bool:
@@ -285,10 +329,10 @@ class LMDBStorage:
                     value = orjson.dumps(validation_data)
                     txn.put(key, value, db=self.validation_db)
 
-            print(f"[LMDB] Batch saved {len(records)} validation records")
+            logger.info(f"Batch saved {len(records)} validation records")
             return True
         except Exception as e:
-            print(f"[LMDB] Error batch saving validation records: {e}")
+            logger.info(f"Error batch saving validation records: {e}")
             return False
 
     def get_validation_record(self, txid: str) -> Optional[Dict]:
@@ -303,7 +347,7 @@ class LMDBStorage:
                     return orjson.loads(value)
             return None
         except Exception as e:
-            print(f"[LMDB] Error getting validation record: {e}")
+            logger.info(f"Error getting validation record: {e}")
             return None
 
     def get_validation_count(self) -> int:
@@ -317,6 +361,70 @@ class LMDBStorage:
             return count
         except:
             return 0
+
+    # ========== BALANCE CACHE ==========
+
+    def save_balance_cache(self, balance_cache: Dict[str, Dict]) -> bool:
+        """
+        Save balance cache to LMDB for fast balance lookups
+
+        Args:
+            balance_cache: Dict mapping address -> {balance: float, last_block: int}
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with self.env.begin(write=True) as txn:
+                # Clear existing cache
+                with txn.cursor(db=self.balance_cache_db) as cursor:
+                    cursor.first()
+                    while cursor.delete():
+                        pass
+
+                # Save new cache entries
+                for address, cache_data in balance_cache.items():
+                    key = address.encode()
+                    value = orjson.dumps(cache_data)
+                    txn.put(key, value, db=self.balance_cache_db)
+
+                # Save metadata about cache
+                metadata = {
+                    "cache_size": len(balance_cache),
+                    "last_updated": time.time(),
+                }
+                txn.put(b"cache_meta", orjson.dumps(metadata), db=self.metadata_db)
+
+            logger.info(f"Saved balance cache with {len(balance_cache)} addresses")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error saving balance cache: {e}")
+            return False
+
+    def load_balance_cache(self) -> Dict[str, Dict]:
+        """
+        Load balance cache from LMDB
+
+        Returns:
+            Dict mapping address -> {balance: float, last_block: int}
+        """
+        try:
+            balance_cache = {}
+
+            with self.env.begin(db=self.balance_cache_db) as txn:
+                with txn.cursor() as cursor:
+                    for key, value in cursor:
+                        address = key.decode()
+                        cache_data = orjson.loads(value)
+                        balance_cache[address] = cache_data
+
+            logger.info(f"Loaded balance cache with {len(balance_cache)} addresses")
+            return balance_cache
+
+        except Exception as e:
+            logger.info(f"Error loading balance cache: {e}")
+            return {}
 
 
 # Global LMDB instance

@@ -2,97 +2,113 @@
 PHN Blockchain Core - With LMDB and Proof of Universal Validation (POUV)
 Fast serialization with orjson
 """
+
 import os
 import time
 import hashlib
 import orjson
+import logging
 from typing import Dict, List, Optional, Tuple
 from ecdsa import VerifyingKey, SECP256k1, BadSignatureError
 from app.core.config import settings
 from app.core.transactions.base import generate_keypair
 
+# Setup logging
+logger = logging.getLogger(__name__)
+
 try:
     from app.core.storage.lmdb import get_lmdb, close_lmdb
+
     LMDB_AVAILABLE = True
 except ImportError:
     print("[CRITICAL] LMDB not available! Install with: pip install lmdb")
     LMDB_AVAILABLE = False
     raise ImportError("LMDB is REQUIRED for production. Install: pip install lmdb")
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 
 # In-memory cache for performance
 blockchain = []
 pending_txs = []
 peers = set()
+balance_cache = {}  # {address: {balance: float, last_block: int}}
+
 
 def init_database():
     """Initialize LMDB database"""
     if not LMDB_AVAILABLE:
         raise RuntimeError("LMDB is REQUIRED. Install: pip install lmdb")
-    
+
     db = get_lmdb()
     print(f"[Blockchain] SUCCESS: LMDB initialized successfully")
+
 
 def save_blockchain():
     """Save blockchain to LMDB using batch writes (OPTIMIZED)"""
     if not LMDB_AVAILABLE:
         raise RuntimeError("LMDB is REQUIRED for saving blockchain")
-    
+
     db = get_lmdb()
     # Using batch writes as recommended in speedup.md
     db.save_blockchain(blockchain)
 
+
 def load_blockchain():
     """Load blockchain from LMDB (NO JSON FALLBACK - LMDB ONLY)"""
     global blockchain
-    
+
     if not LMDB_AVAILABLE:
         raise RuntimeError("LMDB is REQUIRED for loading blockchain")
-    
+
     db = get_lmdb()
     loaded_blocks = db.load_blockchain()
-    
+
     if not loaded_blocks:
         print("[startup] No blockchain found in LMDB - creating genesis block")
         genesis = create_genesis_block()
         blockchain.append(genesis)
         save_blockchain()
-        print(f"[startup] Created genesis block with {settings.TOTAL_SUPPLY * 0.1} PHN allocated to company")
+        print(
+            f"[startup] Created genesis block with {settings.TOTAL_SUPPLY * 0.1} PHN allocated to company"
+        )
         return True
-    
+
     print(f"[startup] Loading blockchain from LMDB...")
     print(f"[DEBUG] Raw data loaded: {len(loaded_blocks)} blocks")
-    
+
     # Verify blockchain
     ok, reason = verify_blockchain(loaded_blocks)
     if not ok:
         print(f"[ERROR] Blockchain verification failed: {reason}")
         return False
-    
+
     blockchain.clear()
     blockchain.extend(loaded_blocks)
     print(f"Successfully loaded and verified {len(blockchain)} blocks")
     print(f"[DEBUG] Blockchain state after loading: {len(blockchain)} blocks")
     print(f"[DEBUG] Loaded blocks: {[b.get('index') for b in blockchain]}")
-    
+
     return True
+
 
 def save_pending_transactions():
     """Save pending transactions to LMDB"""
     if not LMDB_AVAILABLE:
         return
-    
+
     db = get_lmdb()
     db.save_pending_transactions(pending_txs)
+
 
 def load_pending_transactions():
     """Load pending transactions from LMDB"""
     global pending_txs
-    
+
     if not LMDB_AVAILABLE:
         return
-    
+
     try:
         db = get_lmdb()
         loaded_txs = db.load_pending_transactions()
@@ -101,21 +117,23 @@ def load_pending_transactions():
     except Exception as e:
         print(f"[ERROR] Failed to load pending transactions: {e}")
 
+
 def save_peers():
     """Save peers to LMDB"""
     if not LMDB_AVAILABLE:
         return
-    
+
     db = get_lmdb()
     db.save_peers(peers)
+
 
 def load_peers():
     """Load peers from LMDB"""
     global peers
-    
+
     if not LMDB_AVAILABLE:
         return
-    
+
     try:
         db = get_lmdb()
         loaded_peers = db.load_peers()
@@ -123,6 +141,33 @@ def load_peers():
         peers.update(loaded_peers)
     except Exception as e:
         print(f"[ERROR] Failed to load peers: {e}")
+
+
+def save_balance_cache():
+    """Save balance cache to LMDB for persistence"""
+    if not LMDB_AVAILABLE:
+        return
+
+    db = get_lmdb()
+    db.save_balance_cache(balance_cache)
+
+
+def load_balance_cache():
+    """Load balance cache from LMDB"""
+    global balance_cache
+
+    if not LMDB_AVAILABLE:
+        return
+
+    try:
+        db = get_lmdb()
+        loaded_cache = db.load_balance_cache()
+        balance_cache.clear()
+        balance_cache.update(loaded_cache)
+        logger.info(f"Loaded balance cache with {len(balance_cache)} addresses")
+    except Exception as e:
+        logger.error(f"Failed to load balance cache: {e}")
+
 
 def load_owner_address():
     """Load owner address from owner.txt"""
@@ -135,6 +180,7 @@ def load_owner_address():
     except (FileNotFoundError, IndexError):
         return ""
 
+
 def load_owner_private_key():
     """Load owner private key from owner.txt"""
     owner_file = os.path.join(PROJECT_ROOT, "backups", "owner.txt")
@@ -145,6 +191,7 @@ def load_owner_private_key():
             return lines[0].strip() if len(lines) > 0 else ""
     except (FileNotFoundError, IndexError):
         return ""
+
 
 def load_owner_public_key():
     """Load owner public key from owner.txt"""
@@ -157,24 +204,26 @@ def load_owner_public_key():
     except (FileNotFoundError, IndexError):
         return ""
 
+
 def generate_owner_wallet():
     """Generate a new owner wallet and save to owner.txt"""
     # Generate new keypair
     private_key, public_key, address = generate_keypair()
-    
+
     # Save to owner.txt
     owner_file = os.path.join(PROJECT_ROOT, "backups", "owner.txt")
     os.makedirs(os.path.dirname(owner_file), exist_ok=True)
-    
+
     with open(owner_file, "w") as f:
         f.write(f"{private_key}\n")
         f.write(f"{public_key}\n")
         f.write(f"{address}\n")
-    
+
     print(f"[startup] Generated new owner wallet: {address}")
     print(f"[startup] Owner private key: {private_key}")
-    
+
     return private_key, public_key, address
+
 
 def create_genesis_block():
     """Create genesis block with 10% of total supply to newly generated company wallet"""
@@ -185,41 +234,47 @@ def create_genesis_block():
         private_key, public_key, owner_address = generate_owner_wallet()
     else:
         print(f"[startup] Using existing owner wallet: {owner_address}")
-    
+
     company_allocation = settings.TOTAL_SUPPLY * 0.1  # 100 million tokens
-    
+
     tx = {
         "sender": "coinbase",
         "recipient": owner_address,
         "amount": company_allocation,
         "fee": 0.0,
         "timestamp": time.time(),
-        "txid": hashlib.sha256(f"genesis_{owner_address}_{time.time()}".encode()).hexdigest(),
-        "signature": "genesis"
+        "txid": hashlib.sha256(
+            f"genesis_{owner_address}_{time.time()}".encode()
+        ).hexdigest(),
+        "signature": "genesis",
     }
-    
+
     blk = {
         "index": 0,
         "timestamp": time.time(),
         "transactions": [tx],
         "prev_hash": "0" * 64,
-        "nonce": 0
+        "nonce": 0,
     }
-    
+
     blk["hash"] = hash_block(blk)
-    
+
     # POUV: Record genesis block validation
     if LMDB_AVAILABLE:
         db = get_lmdb()
-        db.save_validation_record(tx["txid"], {
-            "txid": tx["txid"],
-            "validated_at": time.time(),
-            "validation_type": "genesis",
-            "block_index": 0,
-            "status": "valid"
-        })
-    
+        db.save_validation_record(
+            tx["txid"],
+            {
+                "txid": tx["txid"],
+                "validated_at": time.time(),
+                "validation_type": "genesis",
+                "block_index": 0,
+                "status": "valid",
+            },
+        )
+
     return blk
+
 
 def hash_block(block):
     """Calculate block hash"""
@@ -228,21 +283,23 @@ def hash_block(block):
     block_string = orjson.dumps(block_copy, option=orjson.OPT_SORT_KEYS)
     return hashlib.sha256(block_string).hexdigest()
 
+
 def verify_blockchain(chain):
     """Verify blockchain integrity"""
     if not isinstance(chain, list) or not chain:
         return False, "chain must be a non-empty list"
-    
+
     for i, b in enumerate(chain):
         if "hash" not in b:
             return False, f"block {i} missing hash"
         if b["hash"] != hash_block(b):
             return False, f"block {i} hash mismatch"
         if i > 0:
-            if b["prev_hash"] != chain[i-1]["hash"]:
+            if b["prev_hash"] != chain[i - 1]["hash"]:
                 return False, f"block {i} prev_hash mismatch"
-    
+
     return True, "ok"
+
 
 def validate_signature(tx):
     """
@@ -252,7 +309,7 @@ def validate_signature(tx):
     try:
         sender = tx.get("sender", "")
         sig_hex = tx.get("signature", "")
-        
+
         # Only system transactions can have special signatures
         if sender in ("coinbase", "miners_pool"):
             # System transactions must have 'genesis' signature
@@ -261,30 +318,35 @@ def validate_signature(tx):
             else:
                 print(f"[SECURITY] System transaction with invalid signature: {sender}")
                 return False
-        
+
         # USER TRANSACTIONS: MUST have valid signature
         if not sig_hex or sig_hex == "genesis":
-            print(f"[SECURITY] User transaction missing signature or using system signature")
+            print(
+                f"[SECURITY] User transaction missing signature or using system signature"
+            )
             return False
-        
+
         # Verify signature
         sig = bytes.fromhex(sig_hex)
         sender_pub = tx.get("sender")
         if not sender_pub:
             return False
-        
+
         vk = VerifyingKey.from_string(bytes.fromhex(sender_pub), curve=SECP256k1)
         tx_copy = dict(tx)
         tx_copy.pop("signature", None)
         tx_json = orjson.dumps(tx_copy, option=orjson.OPT_SORT_KEYS)
-        
+
         verified = vk.verify(sig, tx_json)
         if verified:
-            print(f"[SECURITY] Signature verified for tx {tx.get('txid', 'unknown')[:16]}...")
+            print(
+                f"[SECURITY] Signature verified for tx {tx.get('txid', 'unknown')[:16]}..."
+            )
         return verified
     except (BadSignatureError, Exception) as e:
         print(f"[SECURITY] Signature verification failed: {e}")
         return False
+
 
 def public_key_to_address(public_key_hex):
     """Convert public key to PHN address"""
@@ -295,68 +357,188 @@ def public_key_to_address(public_key_hex):
     except Exception:
         return ""
 
+
+def update_balance_cache(block):
+    """
+    Update balance cache with transactions from a new block
+    This is called when a block is added to the blockchain
+
+    Args:
+        block: The newly added block containing transactions
+    """
+    global balance_cache
+
+    block_index = block.get("index", 0)
+    transactions = block.get("transactions", [])
+
+    logger.debug(
+        f"Updating balance cache for block {block_index} with {len(transactions)} transactions"
+    )
+
+    for tx in transactions:
+        recipient = tx.get("recipient", "")
+        sender = tx.get("sender", "")
+        amount = float(tx.get("amount", 0.0))
+        fee = float(tx.get("fee", 0.0))
+
+        # Update recipient balance
+        if recipient:
+            if recipient not in balance_cache:
+                balance_cache[recipient] = {"balance": 0.0, "last_block": block_index}
+            balance_cache[recipient]["balance"] += amount
+            balance_cache[recipient]["last_block"] = block_index
+
+        # Update sender balance
+        if sender and sender not in ("coinbase", "miners_pool"):
+            # Handle public key conversion
+            if len(sender) == 128:
+                sender_address = public_key_to_address(sender)
+            else:
+                sender_address = sender
+
+            if sender_address:
+                if sender_address not in balance_cache:
+                    balance_cache[sender_address] = {
+                        "balance": 0.0,
+                        "last_block": block_index,
+                    }
+                balance_cache[sender_address]["balance"] -= amount + fee
+                balance_cache[sender_address]["last_block"] = block_index
+
+    logger.debug(f"Balance cache now contains {len(balance_cache)} addresses")
+
+
+def rebuild_balance_cache():
+    """
+    Rebuild entire balance cache from blockchain
+    Called on startup or when cache is invalid
+    """
+    global balance_cache
+
+    logger.info("Rebuilding balance cache from blockchain...")
+    balance_cache.clear()
+
+    for block in blockchain:
+        update_balance_cache(block)
+
+    logger.info(f"Balance cache rebuilt with {len(balance_cache)} addresses")
+    save_balance_cache()
+
+
 def get_balance(address):
-    """Calculate balance for an address - handles both public keys and PHN addresses"""
+    """
+    Calculate balance for an address - OPTIMIZED with caching
+    Uses balance cache for O(1) lookups instead of O(n*m) blockchain iteration
+    """
     if not address:
         return 0.0
-    
+
     # If the address is a public key (128 hex chars), convert to PHN address
-    if len(address) == 128 and all(c in '0123456789abcdef' for c in address.lower()):
-        # This is a public key, convert to PHN address for balance calculation
+    if len(address) == 128 and all(c in "0123456789abcdef" for c in address.lower()):
         phn_address = public_key_to_address(address)
-        print(f"[DEBUG] Converting public key to PHN address: {address[:16]}... -> {phn_address}")
+        logger.debug(
+            f"Converting public key to PHN address: {address[:16]}... -> {phn_address}"
+        )
         address = phn_address
-    
+
+    # Try to get balance from cache first (FAST PATH)
+    if address in balance_cache:
+        cached_balance = balance_cache[address]["balance"]
+
+        # Add pending transactions to cached balance
+        pending_delta = 0.0
+        for tx in pending_txs:
+            recipient = tx.get("recipient", "")
+            sender = tx.get("sender", "")
+
+            if recipient == address:
+                pending_delta += float(tx.get("amount", 0.0))
+            if sender == address:
+                pending_delta -= float(tx.get("amount", 0.0)) + float(
+                    tx.get("fee", 0.0)
+                )
+
+            # Handle public key sender
+            elif (
+                sender != "coinbase" and sender != "miners_pool" and len(sender) == 128
+            ):
+                sender_phn_address = public_key_to_address(sender)
+                if sender_phn_address == address:
+                    pending_delta -= float(tx.get("amount", 0.0)) + float(
+                        tx.get("fee", 0.0)
+                    )
+
+        final_balance = cached_balance + pending_delta
+        logger.debug(
+            f"Balance from cache for {address}: {cached_balance} + {pending_delta} pending = {final_balance} PHN"
+        )
+        return max(0.0, final_balance)  # Balance can't be negative
+
+    # Cache miss - fall back to full calculation (SLOW PATH)
+    logger.warning(f"Cache miss for address {address}, performing full calculation")
+    return _calculate_balance_full(address)
+
+
+def _calculate_balance_full(address):
+    """
+    Full balance calculation - iterates entire blockchain
+    This is the fallback when cache is not available
+    Only used for cache misses or initial cache building
+    """
     bal = 0.0
-    
+
     # Calculate from blockchain
     for block in blockchain:
         for tx in block.get("transactions", []):
             recipient = tx.get("recipient", "")
             sender = tx.get("sender", "")
-            
-            # Check if this address received tokens (exact match)
+
+            # Check if this address received tokens
             if recipient == address:
                 amount = float(tx.get("amount", 0.0))
                 bal += amount
-                print(f"[DEBUG] Found incoming tx: +{amount} PHN to {address}")
-                
-            # Check if this address sent tokens (exact match)
+
+            # Check if this address sent tokens
             if sender == address:
                 amount = float(tx.get("amount", 0.0))
                 fee = float(tx.get("fee", 0.0))
-                bal -= (amount + fee)
-                print(f"[DEBUG] Found outgoing tx: -{amount + fee} PHN from {address}")
-            
-            # Also check if sender is a public key and convert it to PHN address
-            elif sender != "coinbase" and sender != "miners_pool" and len(sender) == 128:
+                bal -= amount + fee
+
+            # Handle public key sender
+            elif (
+                sender != "coinbase" and sender != "miners_pool" and len(sender) == 128
+            ):
                 sender_phn_address = public_key_to_address(sender)
                 if sender_phn_address == address:
                     amount = float(tx.get("amount", 0.0))
                     fee = float(tx.get("fee", 0.0))
-                    bal -= (amount + fee)
-                    print(f"[DEBUG] Found outgoing tx (pubkey converted): -{amount + fee} PHN from {address}")
-    
+                    bal -= amount + fee
+
     # Calculate from pending transactions
     for tx in pending_txs:
         recipient = tx.get("recipient", "")
         sender = tx.get("sender", "")
-        
+
         if recipient == address:
             bal += float(tx.get("amount", 0.0))
         if sender == address:
-            bal -= (float(tx.get("amount", 0.0)) + float(tx.get("fee", 0.0)))
-        
-        # Also check if sender is a public key and convert it to PHN address
+            bal -= float(tx.get("amount", 0.0)) + float(tx.get("fee", 0.0))
+
+        # Handle public key sender
         elif sender != "coinbase" and sender != "miners_pool" and len(sender) == 128:
             sender_phn_address = public_key_to_address(sender)
             if sender_phn_address == address:
-                amount = float(tx.get("amount", 0.0))
-                fee = float(tx.get("fee", 0.0))
-                bal -= (amount + fee)
-    
-    print(f"[DEBUG] Final balance for {address}: {bal} PHN")
-    return bal
+                bal -= float(tx.get("amount", 0.0)) + float(tx.get("fee", 0.0))
+
+    logger.debug(f"Full calculation balance for {address}: {bal} PHN")
+
+    # Add to cache for future lookups
+    if address and blockchain:
+        balance_cache[address] = {"balance": bal, "last_block": len(blockchain) - 1}
+        logger.debug(f"Added {address} to cache")
+
+    return max(0.0, bal)  # Balance can't be negative
+
 
 def calculate_total_mined():
     """Calculate total tokens mined from coinbase transactions"""
@@ -366,6 +548,7 @@ def calculate_total_mined():
             if tx.get("sender") == "coinbase":
                 total += float(tx.get("amount", 0.0))
     return total
+
 
 def get_current_block_reward():
     """
@@ -377,10 +560,11 @@ def get_current_block_reward():
     """
     current_height = len(blockchain)
     halvings = current_height // settings.HALVING_INTERVAL  # Every 1.8M blocks
-    
+
     initial_reward = settings.STARTING_BLOCK_REWARD  # 50.0 PHN
-    reward = initial_reward / (2 ** halvings)
+    reward = initial_reward / (2**halvings)
     return max(reward, 0.00001)  # Minimum reward to keep incentive
+
 
 def make_txid(sender, recipient, amount, fee, timestamp, nonce=None):
     """
@@ -390,17 +574,19 @@ def make_txid(sender, recipient, amount, fee, timestamp, nonce=None):
     # Include a random nonce to prevent collision
     if nonce is None:
         import random
+
         nonce = random.randint(0, 999999)
-    
+
     hash_input = f"{sender}{recipient}{amount}{fee}{timestamp}{nonce}"
-    
+
     print(f"[DEBUG] TXID generation (server):")
     print(f"[DEBUG]   Raw input: {hash_input}")
-    
+
     txid = hashlib.sha256(hash_input.encode()).hexdigest()
     print(f"[DEBUG]   Generated TXID: {txid}")
-    
+
     return txid
+
 
 def validate_transaction_pouv(tx):
     """
@@ -409,7 +595,7 @@ def validate_transaction_pouv(tx):
     ENHANCED WITH TIMESTAMP AND REPLAY PROTECTION
     """
     print(f"[POUV] Validating transaction: {tx.get('txid', 'NO_TXID')}")
-    
+
     # Step 1: Check if transaction already validated or used
     if LMDB_AVAILABLE:
         db = get_lmdb()
@@ -426,10 +612,21 @@ def validate_transaction_pouv(tx):
                 print(f"[POUV] Transaction already validated (but not yet in block)")
                 return True, "ok"
             else:
-                return False, f"Transaction previously rejected: {existing_validation.get('reason')}"
-    
+                return (
+                    False,
+                    f"Transaction previously rejected: {existing_validation.get('reason')}",
+                )
+
     # Step 2: Validate transaction structure
-    required = ["sender", "recipient", "amount", "fee", "timestamp", "txid", "signature"]
+    required = [
+        "sender",
+        "recipient",
+        "amount",
+        "fee",
+        "timestamp",
+        "txid",
+        "signature",
+    ]
     for r in required:
         if r not in tx:
             reason = f"Missing field: {r}"
@@ -439,14 +636,16 @@ def validate_transaction_pouv(tx):
     # Step 3: TIMESTAMP VALIDATION (Replay Attack Protection)
     current_time = time.time()
     tx_timestamp = float(tx.get("timestamp", 0))
-    
+
     # Transaction must not be from the future (allow 60 second clock skew)
     if tx_timestamp > current_time + 60:
-        reason = f"Transaction timestamp is in the future: {tx_timestamp} > {current_time}"
+        reason = (
+            f"Transaction timestamp is in the future: {tx_timestamp} > {current_time}"
+        )
         print(f"[SECURITY] {reason}")
         _save_pouv_record(tx["txid"], "invalid", reason)
         return False, reason
-    
+
     # Transaction must not be too old (prevent replay attacks)
     MAX_TX_AGE = 3600  # 1 hour
     if current_time - tx_timestamp > MAX_TX_AGE:
@@ -477,7 +676,10 @@ def validate_transaction_pouv(tx):
         return False, reason
 
     # Step 7: Validate fee
-    if float(tx["fee"]) < settings.MIN_TX_FEE and tx["sender"] not in ("coinbase", "miners_pool"):
+    if float(tx["fee"]) < settings.MIN_TX_FEE and tx["sender"] not in (
+        "coinbase",
+        "miners_pool",
+    ):
         reason = f"Fee too low; minimum {settings.MIN_TX_FEE}"
         _save_pouv_record(tx["txid"], "invalid", reason)
         return False, reason
@@ -485,13 +687,15 @@ def validate_transaction_pouv(tx):
     # Step 8: Check balance - the get_balance function now handles public key conversion automatically
     sender = tx["sender"]
     if sender not in ("coinbase", "miners_pool"):
-        sender_balance = get_balance(sender)  # This will auto-convert public key to PHN address
+        sender_balance = get_balance(
+            sender
+        )  # This will auto-convert public key to PHN address
         total_needed = float(tx["amount"]) + float(tx["fee"])
-        
+
         print(f"[POUV] Transaction validation - Sender: {sender[:16]}...")
         print(f"[POUV] Transaction validation - Balance: {sender_balance}")
         print(f"[POUV] Transaction validation - Needed: {total_needed}")
-        
+
         if sender_balance < total_needed:
             reason = f"Insufficient balance. Need {total_needed}, have {sender_balance}"
             _save_pouv_record(tx["txid"], "invalid", reason)
@@ -499,27 +703,33 @@ def validate_transaction_pouv(tx):
 
     # Step 9: Save validation record
     _save_pouv_record(tx["txid"], "valid", "All checks passed")
-    
+
     print(f"[POUV] Transaction validation PASSED")
     return True, "ok"
+
 
 def _save_pouv_record(txid, status, reason=""):
     """Save POUV validation record"""
     if not LMDB_AVAILABLE:
         return
-    
+
     db = get_lmdb()
-    db.save_validation_record(txid, {
-        "txid": txid,
-        "validated_at": time.time(),
-        "validation_type": "pouv",
-        "status": status,
-        "reason": reason
-    })
+    db.save_validation_record(
+        txid,
+        {
+            "txid": txid,
+            "validated_at": time.time(),
+            "validation_type": "pouv",
+            "status": status,
+            "reason": reason,
+        },
+    )
+
 
 def validate_transaction(tx):
     """Main transaction validation - uses POUV"""
     return validate_transaction_pouv(tx)
+
 
 def validate_block(block):
     """
@@ -556,7 +766,7 @@ def validate_block(block):
         if not tid or tid in seen:
             return False, "Duplicate or missing txid"
         seen.add(tid)
-        
+
         if tx.get("sender") == "coinbase":
             coinbase_count += 1
             coinbase_amount += float(tx.get("amount", 0.0))
@@ -568,15 +778,20 @@ def validate_block(block):
             if not ok:
                 return False, f"Invalid tx in block: {msg}"
             total_fees += float(tx.get("fee", 0.0))
-            
+
             # Collect validation record for batch write
-            validation_records.append((tid, {
-                "txid": tid,
-                "validated_at": time.time(),
-                "validation_type": "block",
-                "block_index": block["index"],
-                "status": "valid"
-            }))
+            validation_records.append(
+                (
+                    tid,
+                    {
+                        "txid": tid,
+                        "validated_at": time.time(),
+                        "validation_type": "block",
+                        "block_index": block["index"],
+                        "status": "valid",
+                    },
+                )
+            )
 
     # Step 3: Batch write validation records (OPTIMIZED - as per speedup.md)
     if validation_records and LMDB_AVAILABLE:
@@ -598,19 +813,24 @@ def validate_block(block):
             if tx.get("sender") == "coinbase":
                 miner_address = tx.get("recipient")
                 break
-        
+
         if not miner_address:
             return False, "Cannot determine miner address from coinbase transaction"
-        
+
         # Verify fees go to the miner (not owner)
         found = False
         for tx in block.get("transactions", []):
-            if (tx.get("sender") == "miners_pool" and 
-                tx.get("recipient") == miner_address and 
-                abs(float(tx.get("amount", 0.0)) - total_fees) < 1e-9):
+            if (
+                tx.get("sender") == "miners_pool"
+                and tx.get("recipient") == miner_address
+                and abs(float(tx.get("amount", 0.0)) - total_fees) < 1e-9
+            ):
                 found = True
                 break
         if not found:
-            return False, f"miners_pool fee payout to miner ({miner_address}) missing or incorrect"
+            return (
+                False,
+                f"miners_pool fee payout to miner ({miner_address}) missing or incorrect",
+            )
 
     return True, "ok"
