@@ -23,9 +23,9 @@
 
 ## 🎯 What is PHN Blockchain?
 
-PHN (Photon Network) is a **high-performance, production-ready blockchain** built from scratch with **enterprise-grade security** and **optimized performance**. The blockchain achieves **1,337 transactions per second** - making it **191x faster than Bitcoin** and **45x faster than Ethereum**.
+PHN (Phonesium Network) is a **high-performance, production-ready blockchain** built from scratch with **enterprise-grade security** and **optimized performance**. The blockchain achieves **1,337 transactions per second** - making it **191x faster than Bitcoin** and **45x faster than Ethereum**.
 
-### Why Photon (PHN)?
+### Why Phonesium (PHN)?
 
 **PHN isn't just another blockchain - it solves real problems that existing networks face:**
 
